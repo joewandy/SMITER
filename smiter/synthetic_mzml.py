@@ -5,7 +5,7 @@ import time
 import warnings
 from pprint import pformat
 from typing import Callable, Dict, List, Tuple, Union
-from collections import Counter
+from collections import Counter, defaultdict
 
 import numpy as np
 import pyqms
@@ -16,6 +16,8 @@ from psims.mzml import MzMLWriter
 from tqdm import tqdm
 
 import smiter
+from smiter.MzmlWriter import VScan, MzmlWriter, INITIAL_SCAN_ID, ScanParameters, POSITIVE, \
+    Precursor
 from smiter.fragmentation_functions import AbstractFragmentor
 from smiter.lib import (
     calc_mz,
@@ -110,6 +112,7 @@ class Scan(dict):
         return v
 
 
+
 def generate_interval_tree(peak_properties):
     """Conctruct an interval tree containing the elution windows of the analytes.
 
@@ -176,7 +179,39 @@ def write_mzml(
     )
     logger.info("Delete interval tree")
     del interval_tree
-    write_scans(file, scans)
+
+    # write_scans(file, scans)
+
+    all_scans = defaultdict(list)  # key: ms level, value: list of scans for that level
+    for scan, products in scans:
+        sp = ScanParameters()
+        sp.set(ScanParameters.POLARITY, POSITIVE)
+        precursor_scan = VScan(INITIAL_SCAN_ID+scan.id, scan.mz, scan.i, scan.ms_level,
+                               scan.retention_time, scan_params=sp)
+        all_scans[1].append(precursor_scan)
+
+        for product in products:
+            sp = ScanParameters()
+            sp.set(ScanParameters.POLARITY, POSITIVE)
+            precursor_list = []
+            precursor_list.append(
+                Precursor(precursor_mz=product.precursor_mz,
+                          precursor_intensity=product.precursor_i,
+                          precursor_charge=product.precursor_charge,
+                          precursor_scan_id=INITIAL_SCAN_ID+scan.id))
+            sp.set(ScanParameters.PRECURSOR_MZ, precursor_list)
+            sp.set(ScanParameters.COLLISION_ENERGY, 25)
+            sp.set(ScanParameters.ACTIVATION_TYPE, 'HCD')
+
+            product_scan = VScan(INITIAL_SCAN_ID+product.id, product.mz, product.i,
+                                 product.ms_level, product.retention_time, parent=precursor_scan,
+                                 scan_params=sp)
+            all_scans[2].append(product_scan)
+
+    writer = MzmlWriter('my_analysis', all_scans)
+    writer.write_mzML(file)
+    logger.debug('Created mzML file %s' % file)
+
     if not isinstance(file, str):
         file_path = file.name
     else:
@@ -527,6 +562,7 @@ def generate_molecule_isotopologue_lib(
         charges = [1]
     if len(peak_properties) > 0:
         molecules = [d["chemical_formula"] for d in peak_properties.values()]
+        print('Molecules', molecules)
         lib = pyqms.IsotopologueLibrary(
             molecules=molecules,
             charges=charges,
@@ -610,7 +646,7 @@ def write_scans(
                             {"ms level": 1},
                             {
                                 "scan start time": scan.retention_time,
-                                "unit_name": "seconds",
+                                "unit_name": "second",
                             },
                             {"total ion current": spec_tic},
                             {"base peak m/z": mz_at_max_i, "unitName": "m/z"},
@@ -633,7 +669,7 @@ def write_scans(
                                 {"ms level": 2},
                                 {
                                     "scan start time": prod.retention_time,
-                                    "unit_name": "seconds",
+                                    "unit_name": "second",
                                 },
                                 {"total ion current": sum(prod.i)},
                             ],
