@@ -133,3 +133,5 @@ dmypy.json
 example_scripts/*.mzML
 example_scripts/*.html
 example_scripts/*.png
+.idea
+molecule_summary.csv
