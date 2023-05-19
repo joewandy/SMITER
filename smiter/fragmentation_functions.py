@@ -16,6 +16,7 @@ import pandas as pd
 import pyqms
 from loguru import logger
 from pyteomics import mass
+from pyqms.isotopologue_library import ChemicalComposition
 
 import smiter
 from peptide_fragmentor import PeptideFragment0r
@@ -124,14 +125,14 @@ class NucleosideFragmentor(AbstractFragmentor):
             raise_error_for_non_existing_fragments
         )
         nuc_to_fragments: Dict[str, List[float]] = {}
-        cc = pyqms.chemical_composition.ChemicalComposition()
+        cc = ChemicalComposition()
         for nuc_name, nuc_dict in nucleoside_fragment_kb.items():
             nuc_to_fragments[nuc_name] = []
             for frag_name, frag_cc_dict in nucleoside_fragment_kb[nuc_name][
                 "fragments"
             ].items():
-                cc.use(f"+{frag_cc_dict['formula']}")
-                m = cc._mass()
+                cc.use(formula=f"+{frag_cc_dict['formula']}")
+                m = cc.mass()
                 nuc_to_fragments[nuc_name].append(calc_mz(m, 1))
         self.nuc_to_fragments = nuc_to_fragments
 
